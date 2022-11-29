@@ -11,3 +11,13 @@ data.table
 plotly
 DT
 knitr
+matrixStats
+MatrixGenerics
+BiocGenerics
+S4Vectors
+IRanges
+GenomeInfoDb
+GenomicRanges
+Biobase
+SummarizedExperiment
+TCGAbiolinks

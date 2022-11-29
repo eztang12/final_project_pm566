@@ -5,15 +5,13 @@ output:
     html_document:
         toc: TRUE
         toc_float: TRUE
+        self_contained: FALSE
 ---
 
 This is my PM566 Final Project website.
 
-# Set up
-
 ```{r setup, message=FALSE, echo=FALSE, warning=FALSE}
-# Initialize code chunk options
-opts_chunk$set(
+knitr::opts_chunk$set(
   warning = FALSE,
   message = FALSE,
   eval=TRUE,
@@ -34,57 +32,297 @@ library(DT)
 library(knitr)
 ```
 
-# Loading Data
+```{r load-data, echo=FALSE, message=FALSE, results='hide'}
+library(SummarizedExperiment)
+library(TCGAbiolinks)
 
-```{r load-data, echo=FALSE}
-source("process_COVID_data.R")
+clin_query = GDCquery(project = "TCGA-BRCA", data.category = "Clinical", file.type = "xml")
+# GDCdownload(clin_query) 
+clinic = GDCprepare_clinic(clin_query, clinical.info = "patient")
+
 ```
 
-# Interactive Plots
 
-```{r}
-p1_scatter <- cv_states_today %>% 
-  plot_ly(x = ~pop_density, y = ~deathsper100k,
-          type = 'scatter', mode = 'markers', color = ~state,
-          size = ~population, sizes = c(5, 70), marker = list(sizemode='diameter', opacity=0.5),
-          hoverinfo = 'text',
-          text = ~paste( paste(state, ":", sep=""), paste(" Cases per 100k: ", per100k, sep="") , paste(" Deaths per 100k: ",
-                        deathsper100k, sep=""), sep = "<br>")) %>%
-  layout(title = "Population-normalized COVID-19 deaths vs. population density",
-                  yaxis = list(title = "Deaths per 100k"), xaxis = list(title = "Population Density"),
-         hovermode = "compare")
+# Results
 
-# filter out "District of Columbia"
-cv_states_today_scatter <- cv_states_today %>% filter(state!="District of Columbia")
-
-p2_scatter <- cv_states_today_scatter %>% 
-  plot_ly(x = ~pop_density, y = ~deathsper100k,
-          type = 'scatter', mode = 'markers', color = ~state,
-          size = ~population, sizes = c(5, 70), marker = list(sizemode='diameter', opacity=0.5),
-          hoverinfo = 'text',
-          text = ~paste( paste(state, ":", sep=""), paste(" Cases per 100k: ", per100k, sep="") , paste(" Deaths per 100k: ",
-                        deathsper100k, sep=""), sep = "<br>")) %>%
-  layout(title = "Population-normalized COVID-19 deaths vs. population density",
-                  yaxis = list(title = "Deaths per 100k"), xaxis = list(title = "Population Density"),
-         hovermode = "compare")
+```{r, message=FALSE, results='hide', warning=FALSE, echo=FALSE}
+clinic = as.data.table(clinic) 
+skimr::skim(clinic$race_list)
 ```
 
-# Display plots
 
-## Showcasing plots {.tabset}
+```{r, message=FALSE, results='hide', echo=FALSE}
+clinic %>% group_by(race_list) %>% summarise(count = n())
+109/(nrow(clinic))
 
-### Tab 1
-
-```{r echo=FALSE}
-p1_scatter
 ```
 
-### Tab 2
+There are 109 empty values, which makes up around 9% of the dataset. These values were changed to "not reported" to examine if the relationship between survival and cancer diagnosis stage differ among those with missing race information and the other racial groups in this study. 
 
-```{r echo=FALSE}
-p2_scatter
+```{r, message=FALSE, echo=FALSE}
+clinic$race_list = as.character(clinic$race_list)
+clinic$race_list[clinic$race_list == ""] = NA
+clinic$race_list[is.na(clinic$race_list)] = "NOT REPORTED"
+clinic$race_list = as.factor(clinic$race_list)
+
 ```
 
-## {-}
+```{r, echo=FALSE}
+knitr::kable(clinic %>% 
+            group_by(race_list) %>% 
+            summarise(count = n()), 
+            caption = "Table 1: Distribution of Race Among Breast Cancer Patients", 
+            col.names = c("Race", "Number of Individuals"))
 
+```
+
+White patients make up the vast majority of this dataset. Due to the distribution of this dataset, the patients were categorized into "white", "non-white," or "not reported." 
+
+
+```{r, message=FALSE, echo=FALSE}
+clinic$race_bin = ifelse(clinic$race_list == "WHITE", "White", ifelse(clinic$race_list == "NOT REPORTED", "Not Reported", "Non-White"))
+clinic$race_bin = as.factor(clinic$race_bin)
+
+knitr::kable(clinic %>% 
+            group_by(race_bin) %>% 
+            summarise(count = n()), 
+            caption = "Table 2: Distribution of White vs. Non-White Patients Among Breast Cancer Patients", 
+            col.names = c("Racial Group", "Number of Individuals"))
+
+```
+
+After this grouping, there are 264 non-white patients, 109 missing race patients, and 801 white patients. 
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+skimr::skim(clinic$age_at_initial_pathologic_diagnosis)
+skimr::skim(clinic$year_of_initial_pathologic_diagnosis)
+```
+
+Diagnosis year contained missing values as well; this was imputed based on the average within the gender variable.
+
+```{r, message=FALSE, results='hide', warning=FALSE, echo=FALSE}
+
+clinic = clinic[, diag_year_imp := fcoalesce(as.double(year_of_initial_pathologic_diagnosis), mean(year_of_initial_pathologic_diagnosis, na.rm = TRUE)), by = .(gender)]
+clinic$diag_year_imp = ceiling(clinic$diag_year_imp)
+
+clinic = clinic[, lymph_count := fcoalesce(lymph_node_examined_count, as.integer(mean(lymph_node_examined_count, na.rm = TRUE))), by = .(gender)]
+
+```
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+skimr::skim(clinic$diag_year_imp)
+
+```
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+sum(is.na(clinic$vital_status))
+sum(clinic$vital_status == "Dead")
+
+```
+
+There are 112 patients who have passed away, making up about 9.5% of the dataset. 
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+clinic$after_diagnosis = ifelse(is.na(clinic$days_to_death), 2022 - clinic$diag_year_imp, ceiling(clinic$days_to_death/365 ))
+
+summary(clinic$after_diagnosis)
+
+```
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+sum(is.na(clinic$stage_event_pathologic_stage))
+
+```
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+dim(clinic)
+str(clinic)
+head(clinic)
+tail(clinic)
+
+```
+
+After data wrangling and cleaning, the resulting dataset consists of 1062 observations for 116 variables, of which include newly imputed categorical variables and the years survived after diagnosis variable. 
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+summary(clinic$stage_event_pathologic_stage)
+table(clinic$stage_event_pathologic_stage)
+
+summary(clinic$race_list)
+table(clinic$race_list)
+
+summary(clinic$age_at_initial_pathologic_diagnosis)
+
+summary(clinic$diag_year_imp)
+
+summary(clinic$after_diagnosis)
+```
+
+Summary statistics for variables of interest were subsequently generated. Summary statistics for cancer stage show that stages I, II, and III contain different substages on top of their overarching numerical stage; these were then standardized by numerical stage. Summary statistics for age in years shows that the mean and median ages are very similar both at around 58.5 years of age; the minimum age was 26 years of age, and the oldest patient was 90 years old at the time of diagnosis. Summary statistics for diagnosis year shows that most patients in the late 2000s with the last patient being diagnosed in 2013. Finally, summary statistics for years survived after diagnosis showed that the minimum years survived was 9 years after diagnosis, and the maximum was 34 years after diagnosis.
+
+
+```{r, message=FALSE, echo=FALSE}
+clinic$stage_event_pathologic_stage = ifelse(clinic$stage_event_pathologic_stage == "Stage I" | 
+                          clinic$stage_event_pathologic_stage == "Stage IA" | 
+                          clinic$stage_event_pathologic_stage == "Stage IB", "Stage I", 
+      ifelse(clinic$stage_event_pathologic_stage == "Stage II" | 
+                          clinic$stage_event_pathologic_stage == "Stage IIA" | 
+                          clinic$stage_event_pathologic_stage == "Stage IIB", "Stage II", 
+      ifelse(clinic$stage_event_pathologic_stage == "Stage III" | 
+                          clinic$stage_event_pathologic_stage == "Stage IIIA" | 
+                          clinic$stage_event_pathologic_stage == "Stage IIIB" | 
+                          clinic$stage_event_pathologic_stage == "Stage IIIC", "Stage III", 
+      ifelse(clinic$stage_event_pathologic_stage == "Stage IV", "Stage IV", "Stage X"))))
+```
+
+```{r, echo=FALSE}
+stage_stats = clinic %>% 
+  group_by(stage_event_pathologic_stage) %>% 
+  summarise(count = n()) %>% 
+  arrange(desc(count))
+
+stage_stats = stage_stats %>% rename("count" = "Number of Patients", "stage_event_pathologic_stage" = "Stage of Diagnosis")
+knitr::kable(stage_stats, caption = "Table 2: Distribution of Cancer Stage Among Breast Cancer Patients")
+  
+```
+
+
+Most patients were diagnosed at Stage II with 612 patients being diagnosed at this stage. This is followed by Stage III with 237 patients and Stage I with 184 patients. Stage IV and X diagnoses make up a very small number of diagnoses in this dataset. 
+
+## Exploratory Data Analysis
+
+```{r, message=FALSE, echo=FALSE}
+plotly::plot_ly(data = clinic, x = ~race_bin, y = ~age_at_initial_pathologic_diagnosis, color = ~race_bin, type = "box", boxmean = TRUE) %>% layout(title = "Age of Breast Cancer Patients by Race", xaxis = list(title = "Race"), yaxis = list(title = "Age at Diagnosis in Years"))
+```
+
+There does not seem to be much difference in the distribution of diagnosis age among non-white and white patients. White patients seem to have a bigger range in diagnosis ages with a lower third quartile, and higher mean and median diagnosis age. Among non-white patients, the mean diagnosis age is a little higher than the median diagnosis age. However, the patients with missing racial data have higher means and medians than both non-white and white patients. 
+
+```{r, message=FALSE, echo=FALSE}
+
+age_prelim = clinic %>%
+  group_by(race_bin) %>%
+  do(p=plot_ly(., x = ~vital_status, y = ~age_at_initial_pathologic_diagnosis, color = ~race_bin, type = "box", boxmean = TRUE)) %>% 
+  subplot(nrows = 1, shareY = TRUE) %>% layout(title = "Age at Diagnosis Stratified by Vital Status Across Racial Groups", yaxis = list(title = "Age at Diagnosis in Years"))
+
+age_prelim
+
+#age_prim = clinic %>% ggplot(mapping = aes(x = vital_status, y = age_at_initial_pathologic_diagnosis, color = race_list)) + geom_boxplot() + facet_wrap(~race_list) + xlab("Vital Status") + ylab("Age at Diagnosis in Years") + ggtitle("Age at Diagnosis Stratified by Vital Status by Race")
+
+#ggplotly(age_prim)
+
+
+
+```
+
+There are more non-white patients who have passed away with younger diagnosis ages than white and non-white patients; however, the mean and median age of diagnosis among white and non-white patients who have passed away are still quite similar. Regardless of vital status, patients with issing race information have higher ages of diagnosis with the mean age of diagnosis being much higher than the median for those who have passed away. 
+
+
+The distributions for age by cancer stage was then examined.
+
+```{r, echo=FALSE}
+clinic$stage_event_pathologic_stage = as.factor(clinic$stage_event_pathologic_stage)
+
+#fig = clinic %>% 
+#  ggplot(mapping = aes(x = age_at_initial_pathologic_diagnosis, fill = #stage_event_pathologic_stage)) + geom_histogram(bins = 15) + 
+#  xlab("Age in Years at Diagnosis") + 
+# ylab("Count") + 
+#  ggtitle("Distribution of Age by Stage of Cancer Diagnosis")
+
+#ggplotly(fig) %>% layout(legend=list(title=list(text='Stage of Diagnosis')))
+
+
+plot_ly(data = clinic, x = ~age_at_initial_pathologic_diagnosis, color = ~stage_event_pathologic_stage, type = "histogram") %>% layout(barmode = "stack", title = "Distribution of Age by Stage of Cancer Diagnosis", xaxis = list(title = "Age in Years at Diagnosis"), yaxis = list(title = "Count"))
+
+
+```
+
+The distributions of age look relatively normal for every cancer stage; from this stacked histogram, the distribution of age doesn't seem to differ between stage at diagnosis. However, we can also look at the distribution of diagnosis stage by race to see if these distributions are racially differentiated.
+
+```{r, echo=FALSE}
+race_dist = clinic %>% 
+  ggplot(mapping = aes(x = stage_event_pathologic_stage)) + 
+  geom_bar(aes(fill = stage_event_pathologic_stage)) +
+  facet_wrap(~race_bin) + 
+  ggtitle("Distribution of Diagnosis Stage by Race") + 
+  xlab("\nStage of Diagnosis") + 
+  ylab("Number of Patients") + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    axis.title.x = element_text(margin = margin(t = 20))
+  )
+
+ggplotly(race_dist)
+
+```
+
+From these bar graphs, it looks like the distribution of diagnosis stage also does not differ by race. 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+vit_age = clinic %>% 
+  ggplot(mapping = aes(x = age_at_initial_pathologic_diagnosis, y = after_diagnosis, color = vital_status)) + 
+  geom_jitter(aes(size = after_diagnosis, alpha = 0.5, text = paste(paste("Vital status: ", vital_status), "\n", paste("Years Survived after Diagnosis: ", after_diagnosis)))) + 
+  geom_smooth(method = "lm") + 
+  facet_wrap(~stage_event_pathologic_stage) + 
+  xlab("Age in Years at Diagnosis") + 
+  ylab("Years Survived After Diagnosis") + 
+  ggtitle("Years Survived After Cancer Diagnosis by Age and Vital Status") + guides(alpha = FALSE) 
+
+ggplotly(vit_age, tooltip = "text") %>% layout(legend = list(title = list(text = "Vital Status")))
+
+```
+For all stages, those who have passed away have less years survived after diagnosis across all ages compared to those who are still alive. However, some relationships between years survived after diagnosis and age at diagnosis differ across stage; although there seems to be a slight negative relationship between years survived after diagnosis and diagnosis age for stages I, II, III, and X across vital status, there is a slightly positive relationship among those diagnosed at Stage IV across vital status. 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+age_race_stage = clinic %>% 
+  ggplot(mapping = aes(x = age_at_initial_pathologic_diagnosis, y = after_diagnosis, color = race_bin)) + 
+  geom_jitter(aes(text = paste("Vital status: ", vital_status))) + 
+  geom_smooth(method = "lm") + 
+  facet_wrap(~stage_event_pathologic_stage) + 
+  xlab("Age in Years at Diagnosis") + 
+  ylab("Years Survived After Diagnosis") + 
+  ggtitle("Years Survived After Cancer Diagnosis by Age, Race, and Stage") 
+
+ggplotly(age_race_stage, tooltip = "text") %>% layout(legend = list(title = list(text = "Race")))
+
+```
+
+
+There seems to be very slightly negative relationship between years survived after diagnosis and age in stages I, II, and III across all racial groups. There is, however, a slight positive relationship between years survived after diagnosis and age for white and missing race patients in Stage IV and non-white patients in Stage X. This suggests that the relationship between years survived and age does differ to an extent by stage.  
+
+These visual differences suggest that race of a patient and stage of diagnosis may have interaction effects.
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+summary = clinic %>% 
+  ggplot() + 
+  stat_summary(mapping = aes(x = race_bin, y = after_diagnosis, color = race_bin, text = paste("Vital Status: ", vital_status)), 
+               fun.min = min, fun.max = max, fun = mean, na.rm = TRUE) + 
+  xlab("Race") + 
+  ylab("Years Survived After Diagnosis") + 
+  ggtitle("Summary of Years Survived After Diagnosis by Race") + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), plot.margin = margin(10, 10, 10, 100))
+
+ggplotly(summary) %>% layout(legend = list(title = list(text = "Race")))
+
+```
+
+The summary graph suggests that white patients who have survived have on average live longer than non-white patients who have survived; on the other hand, the average years survived after diagnosis for those have passed away do not differ much between non-white and white patients. However, the mean years survived after diagnosis for the missing race patients who have survived is slightly higher than non-white and white-patients, and the mean years survived after diagnosis for those who have passed away are lower than non-white and white patients. Furthermore, the range of years survived after diagnosis for both white and non-white patients are much larger than those who have missing race information. Given the relationships between years survived after diagnosis and age of diagnosis for stage IV and X for non-reported and white patients, it is likely that missing race patients are the most similar to white patients; however, because of similarities in age of diagnosis across vital status and distributions in diagnosis stage for non-white and white patients in this dataset, this cannot be confirmed.  
+
+
+## Conclusion
+From this analysis, it was revealed that there were no significant differences between the distribution of diagnosis age or stage of diagnosis among white and non-white breast cancer patients. However, it was found that across vital status, the relationship between years survived after diagnosis for those who were diagnosed in Stage IV differs from other stages of diagnosis where there was a slightly positive relationship compared to other stages that have seen slightly negative relationships. Similarly, white and missing race patients saw a slightly positive relationship between years survived after diagnosis and age of diagnosis in Stage IV compared to other stages, where patients of all racial groups saw a slightly negative relationship. However, due to the limited number of patients in both Stage IV compared to the other stages, future analysis should be done with a larger sample size. 
+
+## References
+Azamjah, N., Soltan-Zadeh, Y., & Zayeri, F. (2019). Global trend of breast cancer mortality
+rate: A 25-year study. Asian Pacific Journal of Cancer Prevention, 20(7), 2015–2020.
+
+McGuire, A., Brown, J., Malone, C., McLaughlin, R., & Kerin, M. (2015). Effects of age on the detection and management of  breast cancer. Cancers, 7(2), 908–929. 
+
+National Institute of Health. (n.d.). The Cancer Genome Atlas Program. National Cancer
+Institute. Retrieved October 18, 2022, from
+https://www.cancer.gov/about-nci/organization/ccg/research/structural-genomics/tcga
+
+Ooi, S. L., Martinez, M. E., & Li, C. I. (2010). Disparities in breast cancer characteristics and outcomes by Race/Ethnicity. Breast Cancer Research and Treatment, 127(3), 729–738. 
+
+Wang, L. (2017). Early Diagnosis of Breast Cancer. Biosensors for Cancer Biomarkers, 17(7),
+1572. 
 

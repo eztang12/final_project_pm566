@@ -1,0 +1,22 @@
+---
+title: "Data Background and Methods"
+author: "Echo Tang"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+Breast cancer is the most common malignant cancer in the world for women with over one million cases being diagnosed annually (Wang 2017). Although mortality rates for breast cancer are lower in the United States and Asia, other countries have unfortunately not seen the same trend, emphasizing the urgency of studying breast cancer and its associated risk factors (Azamjah et al. 2019). Like other cancers, breast cancer incidence increases with age with women above 50 years old being more likely to develop breast cancer than younger women. On the other hand, however, previous research has demonstrated that those who receive breast cancer diagnoses at younger ages also have higher reported mortality rates than those who are diagnosed later (McGuire et al., 2015). Previous studies have also shown that race may be a risk factor for breast cancer, as many women of color have higher mortality rates than non-Hispanic white women. Women of color, particularly Black and Native American women, are also associated with getting breast cancer diagnoses at later stages than white women, indicating that stage can confound the relationship between race and survival status (Ooi et al. 2011). Furthermore, women of color are less likely to have access to liquid biopsies as diagnosis methods, which have been seen to be associated with better survival outcomes compared to traditional diagnosis methods (Kim et al. 2017). Given that age and race are two risk factors, there is limited research done on how age at diagnosis can *interact* with stage of diagnosis and race specifically in breast cancer diagnosis, and how that in turn can contribute to and exacerbate these differences in mortality rates. Understanding differences between the clinical progression of breast cancer across these risk factors can contribute to more nuanced care that can potentially bridge inequities in survivability. 
+
+Given these risk factors, this study aims to address the question if race affects the age of diagnosis for breast cancer, if the effects of age and diagnosis stage on vital status differ by race. To conduct the analysis, publicly available clinical data from The Cancer Genome Atlas (TCGA) was used, a cancer genomics program that has collected genomics, epigenomics, clinical, transcriptomic, and proteomic data of over 20,000 primary cancer samples across 33 different cancer types (TCGA, n.d.). For this study, only the clinical data for breast cancer patients were accessed to answer the research question. By analyzing the characteristics of breast cancer across multiple different demographics, we hope to gain a more holistic perspective of the disease.
+	
+# Methods
+Breast cancer clinical data was accessed from TCGA using the R package `TCGAbiolinks` with the accession code “BRCA.” For data wrangling and cleaning, the clinical data was converted to a data table using the `data.table` package. 
+
+To prepare the data, missing racial data was imputed based on the most common value. Then, missing numerical data (diagnosis year) was imputed based on mean by sex. Reported substages of cancer diagnosis were standardized to the five stages I through X. Years survived after diagnosis was used as a metric for survivability and was calculated by taking the difference of year of death calculated from the variable days to death (or the current year 2022 for patients who are still alive) and year of cancer diagnosis. Implausible negative values for years survived were subsequently removed from the dataset. After data cleaning and wrangling, the resulting dataset contained the imputed categorical and numerical variables, standardized stage, and years survived after diagnosis for the remaining 1062 breast cancer patients. 
+
+Descriptive and summary statistics for variables of interest were generated and tabulated using the R package `dplyr` and standardized using the `kable` function from `knitr`. Data visualization and exploratory data analysis were done through the R package `ggplot`.
