@@ -1,1 +1,3 @@
 My PM566 final project website is at this link: https://eztang12.github.io/final_project_pm566/
+
+Code to download the data is included in the R markdown file `index.Rmd`. Note that the while data will have to be queried and loaded every time a new R session is started, the download command only needs to be run once. I commented out the download function because it does take quite a while, but if the data isn't already on your machine, please uncomment to download data.

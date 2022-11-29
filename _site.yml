@@ -5,7 +5,7 @@ navbar:
   left:
     - text: "Home"
       href: index.html
-    - text: "Background and Methods"
+    - text: "Background, Methods, and Summary Tables"
       href: intro_methods.html
 output:
   html_document:

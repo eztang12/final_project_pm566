@@ -1,13 +1,9 @@
 ---
-title: "Data Background and Methods"
+title: "Data Background, Methods, and Summary Statistics"
 author: "Echo Tang"
 date: "`r Sys.Date()`"
 output: html_document
 ---
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
 
 # Introduction
 Breast cancer is the most common malignant cancer in the world for women with over one million cases being diagnosed annually (Wang 2017). Although mortality rates for breast cancer are lower in the United States and Asia, other countries have unfortunately not seen the same trend, emphasizing the urgency of studying breast cancer and its associated risk factors (Azamjah et al. 2019). Like other cancers, breast cancer incidence increases with age with women above 50 years old being more likely to develop breast cancer than younger women. On the other hand, however, previous research has demonstrated that those who receive breast cancer diagnoses at younger ages also have higher reported mortality rates than those who are diagnosed later (McGuire et al., 2015). Previous studies have also shown that race may be a risk factor for breast cancer, as many women of color have higher mortality rates than non-Hispanic white women. Women of color, particularly Black and Native American women, are also associated with getting breast cancer diagnoses at later stages than white women, indicating that stage can confound the relationship between race and survival status (Ooi et al. 2011). Furthermore, women of color are less likely to have access to liquid biopsies as diagnosis methods, which have been seen to be associated with better survival outcomes compared to traditional diagnosis methods (Kim et al. 2017). Given that age and race are two risk factors, there is limited research done on how age at diagnosis can *interact* with stage of diagnosis and race specifically in breast cancer diagnosis, and how that in turn can contribute to and exacerbate these differences in mortality rates. Understanding differences between the clinical progression of breast cancer across these risk factors can contribute to more nuanced care that can potentially bridge inequities in survivability. 
@@ -20,3 +16,144 @@ Breast cancer clinical data was accessed from TCGA using the R package `TCGAbiol
 To prepare the data, missing racial data was imputed based on the most common value. Then, missing numerical data (diagnosis year) was imputed based on mean by sex. Reported substages of cancer diagnosis were standardized to the five stages I through X. Years survived after diagnosis was used as a metric for survivability and was calculated by taking the difference of year of death calculated from the variable days to death (or the current year 2022 for patients who are still alive) and year of cancer diagnosis. Implausible negative values for years survived were subsequently removed from the dataset. After data cleaning and wrangling, the resulting dataset contained the imputed categorical and numerical variables, standardized stage, and years survived after diagnosis for the remaining 1062 breast cancer patients. 
 
 Descriptive and summary statistics for variables of interest were generated and tabulated using the R package `dplyr` and standardized using the `kable` function from `knitr`. Data visualization and exploratory data analysis were done through the R package `ggplot`.
+
+# Summary Statistics
+
+```{r setup, message=FALSE, echo=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE,
+  eval=TRUE,
+  echo = TRUE,
+  cache = TRUE,
+  fig.width = 7, 
+  fig.align = 'center',
+  fig.asp = 0.618,
+  out.width = "700px")
+```
+
+```{r load packages, message=FALSE, echo=FALSE, warning=FALSE}
+library(data.table)
+library(tidyverse)
+library(dplyr)
+library(plotly)
+library(DT)
+library(knitr)
+```
+
+```{r load-data, echo=FALSE, message=FALSE, results='hide'}
+library(SummarizedExperiment)
+library(TCGAbiolinks)
+
+clin_query = GDCquery(project = "TCGA-BRCA", data.category = "Clinical", file.type = "xml")
+# GDCdownload(clin_query) 
+clinic = GDCprepare_clinic(clin_query, clinical.info = "patient")
+clinic = as.data.table(clinic) 
+```
+
+```{r, message=FALSE, echo=FALSE}
+clinic$race_list = as.character(clinic$race_list)
+clinic$race_list[clinic$race_list == ""] = NA
+clinic$race_list[is.na(clinic$race_list)] = "NOT REPORTED"
+clinic$race_list = as.factor(clinic$race_list)
+
+```
+
+```{r, echo=FALSE}
+knitr::kable(clinic %>% 
+            group_by(race_list) %>% 
+            summarise(count = n()), 
+            caption = "Table 1: Distribution of Race Among Breast Cancer Patients", 
+            col.names = c("Race", "Number of Individuals"))
+
+```
+
+There are 109 empty values, which makes up around 9% of the dataset. These values were changed to "not reported" to examine if the relationship between survival and cancer diagnosis stage differ among those with missing race information and the other racial groups in this study.
+
+```{r, echo = FALSE}
+clinic$race_bin = ifelse(clinic$race_list == "WHITE", "White", ifelse(clinic$race_list == "NOT REPORTED", "Not Reported", "Non-White"))
+clinic$race_bin = as.factor(clinic$race_bin)
+
+knitr::kable(clinic %>% 
+            group_by(race_bin) %>% 
+            summarise(count = n()), 
+            caption = "Table 2: Distribution of White vs. Non-White Patients Among Breast Cancer Patients", 
+            col.names = c("Racial Group", "Number of Individuals"))
+```
+
+White patients make up the vast majority of this dataset. Due to the distribution of this dataset, the patients were categorized into "white", "non-white," or "not reported."
+
+
+Summary statistics for variables of interest were subsequently generated. Summary statistics for cancer stage show that stages I, II, and III contain different substages on top of their overarching numerical stage; these were then standardized by numerical stage. Summary statistics for age in years shows that the mean and median ages are very similar both at around 58.5 years of age; the minimum age was 26 years of age, and the oldest patient was 90 years old at the time of diagnosis. Summary statistics for diagnosis year shows that most patients in the late 2000s with the last patient being diagnosed in 2013. Finally, summary statistics for years survived after diagnosis showed that the minimum years survived was 9 years after diagnosis, and the maximum was 34 years after diagnosis.
+
+```{r, message=FALSE, echo=FALSE}
+clinic$stage_event_pathologic_stage = ifelse(clinic$stage_event_pathologic_stage == "Stage I" | 
+                          clinic$stage_event_pathologic_stage == "Stage IA" | 
+                          clinic$stage_event_pathologic_stage == "Stage IB", "Stage I", 
+      ifelse(clinic$stage_event_pathologic_stage == "Stage II" | 
+                          clinic$stage_event_pathologic_stage == "Stage IIA" | 
+                          clinic$stage_event_pathologic_stage == "Stage IIB", "Stage II", 
+      ifelse(clinic$stage_event_pathologic_stage == "Stage III" | 
+                          clinic$stage_event_pathologic_stage == "Stage IIIA" | 
+                          clinic$stage_event_pathologic_stage == "Stage IIIB" | 
+                          clinic$stage_event_pathologic_stage == "Stage IIIC", "Stage III", 
+      ifelse(clinic$stage_event_pathologic_stage == "Stage IV", "Stage IV", "Stage X"))))
+```
+
+```{r, echo=FALSE}
+stage_stats = clinic %>% 
+  group_by(stage_event_pathologic_stage) %>% 
+  summarise(count = n()) %>% 
+  arrange(desc(count))
+
+stage_stats = stage_stats %>% rename("count" = "Number of Patients", "stage_event_pathologic_stage" = "Stage of Diagnosis")
+knitr::kable(stage_stats, caption = "Table 3: Distribution of Cancer Stage Among Breast Cancer Patients")
+```
+
+Most patients were diagnosed at Stage II with 612 patients being diagnosed at this stage. This is followed by Stage III with 237 patients and Stage I with 184 patients. Stage IV and X diagnoses make up a very small number of diagnoses in this dataset. 
+
+```{r, echo=FALSE}
+knitr::kable(clinic %>% group_by(vital_status) %>% summarise(count = n()) %>% rename("count" = "Number of Patients", "vital_status" = "Vital Status"), caption = "Table 4: Vital Status Distribution")
+```
+
+There are 112 patients who have passed away, making up about 9.5% of the dataset. 
+
+
+The distributions for age by cancer stage was then examined.
+
+```{r, echo=FALSE}
+clinic$stage_event_pathologic_stage = as.factor(clinic$stage_event_pathologic_stage)
+
+#fig = clinic %>% 
+#  ggplot(mapping = aes(x = age_at_initial_pathologic_diagnosis, fill = #stage_event_pathologic_stage)) + geom_histogram(bins = 15) + 
+#  xlab("Age in Years at Diagnosis") + 
+# ylab("Count") + 
+#  ggtitle("Distribution of Age by Stage of Cancer Diagnosis")
+
+#ggplotly(fig) %>% layout(legend=list(title=list(text='Stage of Diagnosis')))
+
+
+plot_ly(data = clinic, x = ~age_at_initial_pathologic_diagnosis, color = ~stage_event_pathologic_stage, type = "histogram") %>% layout(barmode = "stack", title = "Distribution of Age by Stage of Cancer Diagnosis", xaxis = list(title = "Age in Years at Diagnosis"), yaxis = list(title = "Count"))
+
+
+```
+
+The distributions of age look relatively normal for every cancer stage; from this stacked histogram, the distribution of age doesn't seem to differ between stage at diagnosis. However, we can also look at the distribution of diagnosis stage by race to see if these distributions are racially differentiated.
+
+```{r, echo=FALSE}
+race_dist = clinic %>% 
+  ggplot(mapping = aes(x = stage_event_pathologic_stage)) + 
+  geom_bar(aes(fill = stage_event_pathologic_stage)) +
+  facet_wrap(~race_bin) + 
+  ggtitle("Distribution of Diagnosis Stage by Race") + 
+  xlab("\nStage of Diagnosis") + 
+  ylab("Number of Patients") + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    axis.title.x = element_text(margin = margin(t = 20))
+  )
+
+ggplotly(race_dist)
+
+```
+
+From these bar graphs, it looks like the distribution of diagnosis stage also does not differ by race. 
