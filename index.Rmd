@@ -230,10 +230,10 @@ ggplotly(summary) %>% layout(legend = list(title = list(text = "Race")))
 The summary graph suggests that white patients who have survived have on average live longer than non-white patients who have survived; on the other hand, the average years survived after diagnosis for those have passed away do not differ much between non-white and white patients. However, the mean years survived after diagnosis for the missing race patients who have survived is slightly higher than non-white and white-patients, and the mean years survived after diagnosis for those who have passed away are lower than non-white and white patients. Furthermore, the range of years survived after diagnosis for both white and non-white patients are much larger than those who have missing race information. Given the relationships between years survived after diagnosis and age of diagnosis for stage IV and X for non-reported and white patients, it is likely that missing race patients are the most similar to white patients; however, because of similarities in age of diagnosis across vital status and distributions in diagnosis stage for non-white and white patients in this dataset, this cannot be confirmed.  
 
 
-## Conclusion
+# Conclusion
 From this analysis, it was revealed that there were no significant differences between the distribution of diagnosis age or stage of diagnosis among white and non-white breast cancer patients. However, it was found that across vital status, the relationship between years survived after diagnosis for those who were diagnosed in Stage IV differs from other stages of diagnosis where there was a slightly positive relationship compared to other stages that have seen slightly negative relationships. Similarly, white and missing race patients saw a slightly positive relationship between years survived after diagnosis and age of diagnosis in Stage IV compared to other stages, where patients of all racial groups saw a slightly negative relationship. However, due to the limited number of patients in both Stage IV compared to the other stages, future analysis should be done with a larger sample size. 
 
-## References
+# References
 Azamjah, N., Soltan-Zadeh, Y., & Zayeri, F. (2019). Global trend of breast cancer mortality
 rate: A 25-year study. Asian Pacific Journal of Cancer Prevention, 20(7), 2015–2020.
 
