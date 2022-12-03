@@ -210,7 +210,7 @@ ggplotly(age_race_stage, tooltip = "text") %>% layout(legend = list(title = list
 
 There seems to be very slightly negative relationship between years survived after diagnosis and age in stages I, II, and III across all racial groups. There is, however, a slight positive relationship between years survived after diagnosis and age for white and missing race patients in Stage IV and non-white patients in Stage X. This suggests that the relationship between years survived and age does differ to an extent by stage.  
 
-These visual differences suggest that race of a patient and stage of diagnosis may have interaction effects.
+These visual differences suggest that race of a patient and stage of diagnosis may have interaction effects; however, a bigger sample size may be needed to confirm these relationships.
 
 
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
