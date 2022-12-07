@@ -10,6 +10,7 @@ output:
 
 Breast cancer is the most common malignant cancer in the world for those assigned female at birth. Like other cancers, breast cancer incidence increases with age with those above 50 years old being more likely to develop breast cancer; however, previous research has also demonstrated that those who are diagnosed at younger ages also have higher reported mortality rates. Previous studies have also shown that race may be a risk factor for breast cancer, as many women of color have higher mortality rates than non-Hispanic white women, and are also associated with getting breast cancer diagnoses at later stages than white women. Given that age and race are two risk factors, there is limited research done on how age at diagnosis can *interact* with stage of diagnosis and race specifically in breast cancer diagnosis, and how that in turn can contribute to and exacerbate these differences in mortality rates. Understanding differences between the clinical progression of breast cancer across these risk factors can contribute to more nuanced care that can potentially bridge inequities in survivability. This study, therefore, aims to address the question if race affects the age of diagnosis for breast cancer, and if the effects of age and diagnosis stage on vital status differ by race.
 
+Click [here](https://github.com/eztang12/final_project_pm566/blob/main/final_report.pdf) to download the full report. 
 
 ```{r setup, message=FALSE, echo=FALSE, warning=FALSE}
 knitr::opts_chunk$set(
