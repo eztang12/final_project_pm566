@@ -124,15 +124,6 @@ The distributions for age by cancer stage was then examined.
 ```{r, echo=FALSE}
 clinic$stage_event_pathologic_stage = as.factor(clinic$stage_event_pathologic_stage)
 
-#fig = clinic %>% 
-#  ggplot(mapping = aes(x = age_at_initial_pathologic_diagnosis, fill = #stage_event_pathologic_stage)) + geom_histogram(bins = 15) + 
-#  xlab("Age in Years at Diagnosis") + 
-# ylab("Count") + 
-#  ggtitle("Distribution of Age by Stage of Cancer Diagnosis")
-
-#ggplotly(fig) %>% layout(legend=list(title=list(text='Stage of Diagnosis')))
-
-
 plot_ly(data = clinic, x = ~age_at_initial_pathologic_diagnosis, color = ~stage_event_pathologic_stage, type = "histogram") %>% layout(barmode = "stack", title = "Distribution of Age by Stage of Cancer Diagnosis", xaxis = list(title = "Age in Years at Diagnosis"), yaxis = list(title = "Count"))
 
 
@@ -141,9 +132,11 @@ plot_ly(data = clinic, x = ~age_at_initial_pathologic_diagnosis, color = ~stage_
 The distributions of age look relatively normal for every cancer stage; from this stacked histogram, the distribution of age doesn't seem to differ between stage at diagnosis. However, we can also look at the distribution of diagnosis stage by race to see if these distributions are racially differentiated.
 
 ```{r, echo=FALSE}
-race_dist = clinic %>% 
+race_count = clinic %>% group_by(race_bin, stage_event_pathologic_stage) %>% mutate(num_stage = n())
+
+race_dist = race_count %>% 
   ggplot(mapping = aes(x = stage_event_pathologic_stage)) + 
-  geom_bar(aes(fill = stage_event_pathologic_stage)) +
+  geom_bar(aes(fill = stage_event_pathologic_stage, text = paste(paste("Count: ", num_stage, "\n"), paste("Stage: ", stage_event_pathologic_stage)))) +
   facet_wrap(~race_bin) + 
   ggtitle("Distribution of Diagnosis Stage by Race") + 
   xlab("\nStage of Diagnosis") + 
@@ -152,7 +145,7 @@ race_dist = clinic %>%
     axis.title.x = element_text(margin = margin(t = 20))
   )
 
-ggplotly(race_dist)
+ggplotly(race_dist, tooltip = "text") %>% layout(legend = list(title = list(text = "Diagnosis Stage")))
 
 ```
 

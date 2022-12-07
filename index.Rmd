@@ -1,5 +1,5 @@
 ---
-title: "PM566 Final Project - Race, Age, and Diagnosis Stage in Breast Cancer Mortality"
+title: "Race, Age, and Diagnosis Stage in Breast Cancer Mortality"
 author: "Echo Tang"
 output: 
     html_document:
@@ -154,25 +154,13 @@ stage_stats = stage_stats %>% rename("count" = "Number of Patients", "stage_even
 ## Exploratory Data Analysis
 
 ```{r, message=FALSE, echo=FALSE}
-plotly::plot_ly(data = clinic, x = ~race_bin, y = ~age_at_initial_pathologic_diagnosis, color = ~race_bin, type = "box", boxmean = TRUE) %>% layout(title = "Age of Breast Cancer Patients by Race", xaxis = list(title = "Race"), yaxis = list(title = "Age at Diagnosis in Years"))
-```
-
-There does not seem to be much difference in the distribution of diagnosis age among non-white and white patients. White patients seem to have a bigger range in diagnosis ages with a lower third quartile, and higher mean and median diagnosis age. Among non-white patients, the mean diagnosis age is a little higher than the median diagnosis age. However, the patients with missing racial data have higher means and medians than both non-white and white patients. 
-
-```{r, message=FALSE, echo=FALSE}
 
 age_prelim = clinic %>%
   group_by(race_bin) %>%
   do(p=plot_ly(., x = ~vital_status, y = ~age_at_initial_pathologic_diagnosis, color = ~race_bin, type = "box", boxmean = TRUE)) %>% 
-  subplot(nrows = 1, shareY = TRUE) %>% layout(title = "Age at Diagnosis Stratified by Vital Status Across Racial Groups", yaxis = list(title = "Age at Diagnosis in Years"))
+  subplot(nrows = 1, shareY = TRUE) %>% layout(title = "Age at Diagnosis Stratified by Vital Status Across Racial Groups", yaxis = list(title = "Age at Diagnosis in Years", hoverformat = '.2f'))
 
 age_prelim
-
-#age_prim = clinic %>% ggplot(mapping = aes(x = vital_status, y = age_at_initial_pathologic_diagnosis, color = race_list)) + geom_boxplot() + facet_wrap(~race_list) + xlab("Vital Status") + ylab("Age at Diagnosis in Years") + ggtitle("Age at Diagnosis Stratified by Vital Status by Race")
-
-#ggplotly(age_prim)
-
-
 
 ```
 
@@ -191,6 +179,7 @@ vit_age = clinic %>%
 ggplotly(vit_age, tooltip = "text") %>% layout(legend = list(title = list(text = "Vital Status")))
 
 ```
+
 For all stages, those who have passed away have less years survived after diagnosis across all ages compared to those who are still alive. However, some relationships between years survived after diagnosis and age at diagnosis differ across stage; although there seems to be a slight negative relationship between years survived after diagnosis and diagnosis age for stages I, II, III, and X across vital status, there is a slightly positive relationship among those diagnosed at Stage IV across vital status. 
 
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
@@ -214,16 +203,18 @@ These visual differences suggest that race of a patient and stage of diagnosis m
 
 
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
-summary = clinic %>% 
+year_clinic = clinic %>% group_by(race_bin, vital_status) %>% mutate(mean_years = round(mean(after_diagnosis), 2))
+
+summary = year_clinic %>% 
   ggplot() + 
-  stat_summary(mapping = aes(x = race_bin, y = after_diagnosis, color = race_bin, text = paste("Vital Status: ", vital_status)), 
+  stat_summary(mapping = aes(x = race_bin, y = after_diagnosis, color = race_bin, text = paste(paste("Vital Status: ", vital_status, "\n"), paste("Mean years survived after diagnosis: ", mean_years))), 
                fun.min = min, fun.max = max, fun = mean, na.rm = TRUE) + 
   xlab("Race") + 
   ylab("Years Survived After Diagnosis") + 
   ggtitle("Summary of Years Survived After Diagnosis by Race") + 
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), plot.margin = margin(10, 10, 10, 100))
 
-ggplotly(summary) %>% layout(legend = list(title = list(text = "Race")))
+ggplotly(summary, tooltip = "text") %>% layout(legend = list(title = list(text = "Race")))
 
 ```
 

@@ -1,9 +1,9 @@
 name: "my-website"
 output_dir: "."
 navbar:
-  title: "PM566 Final Project"
+  title: "Race, Age, and Stage in Breast Cancer Mortality"
   left:
-    - text: "Home"
+    - text: "Results and Analysis"
       href: index.html
     - text: "Background, Methods, and Summary Tables"
       href: intro_methods.html
