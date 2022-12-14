@@ -1,0 +1,573 @@
+---
+title: "PM566/592 Final Project"
+author: "Echo Tang"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+Breast cancer is the most common malignant cancer in the world for women with over one million cases being diagnosed annually (Wang 2017). Although mortality rates for breast cancer are lower in the United States and Asia, other countries have unfortunately not seen the same trend, emphasizing the urgency of studying breast cancer and its associated risk factors (Azamjah et al. 2019). Like other cancers, breast cancer incidence increases with age with women above 50 years old being more likely to develop breast cancer than younger women. On the other hand, however, previous research has demonstrated that those who receive breast cancer diagnoses at younger ages also have higher reported mortality rates than those who are diagnosed later (McGuire et al., 2015). Previous studies have also shown that race may be a risk factor for breast cancer, as many women of color have higher mortality rates than non-Hispanic white women. Women of color are also associated with getting breast cancer diagnoses at later stages than white women, indicating that stage can confound the relationship between race and survival status (Ooi et al. 2011). Furthermore, women of color are less likely to have access to liquid biopsies as diagnosis methods, which have been seen to be associated with better survival outcomes compared to traditional diagnosis methods (Kim et al. 2017). Diagnosis methods, therefore, may also act as a confounder between vital status and race. Given that age and race are two risk factors, there is limited research done on how age at diagnosis can *interact* with stage of diagnosis and race specifically in breast cancer diagnosis, and how that in turn can contribute to and exacerbate these differences in mortality rates. Understanding differences between the clinical progression of breast cancer across these risk factors can contribute to more nuanced care that can potentially bridge inequities in survivability. 
+
+There has also been research suggesting that those with higher lymph node counts have lower survival rates of metastatic breast cancer for those in higher cancer stages (Yang et al. 2017). This also raises for concern on how lymph node counts, coupled with diagnosis method and cancer stage, can influence survival outcomes by interacting with stage of cancer diagnosis. 
+
+Given these risk factors, this study aims to address the question if race affects the age of diagnosis for breast cancer, if the effects of age and diagnosis stage on vital status differ by race, and if these relationships are complicated by lymph node count and diagnosis methods. To conduct the analysis, publicly available clinical data from The Cancer Genome Atlas (TCGA) was used, a cancer genomics program that has collected genomics, epigenomics, clinical, transcriptomic, and proteomic data of over 20,000 primary cancer samples across 33 different cancer types (TCGA, n.d.). For this study, only the clinical data for breast cancer patients were accessed to answer the research question. By analyzing the characteristics of breast cancer across multiple different demographics, we hope to gain a more holistic perspective of the disease.
+	
+# Methods
+Breast cancer clinical data was accessed from TCGA using the R package `TCGAbiolinks` with the accession code “BRCA.” For data wrangling and cleaning, the clinical data was converted to a data table using the `data.table` package. 
+
+To prepare the data, missing racial data was imputed based on the most common value. Then, missing numerical data (diagnosis year) was imputed based on mean by sex. Reported substages of cancer diagnosis were standardized to the five stages I through X. Years survived after diagnosis was used as a metric for survivability and was calculated by taking the difference of year of death calculated from the variable days to death (or the current year 2022 for patients who are still alive) and year of cancer diagnosis. Implausible negative values for years survived were subsequently removed from the dataset. After data cleaning and wrangling, the resulting dataset contained the imputed categorical and numerical variables, standardized stage, and years survived after diagnosis for the remaining 1062 breast cancer patients. 
+
+Descriptive and summary statistics for variables of interest were generated and tabulated using the R package `dplyr` and standardized using the `kable` function from `knitr`. Data visualization and exploratory data analysis were done through the R package `ggplot`.
+
+For logistic regression analysis, univariate analyses were first conducted for each variable of interest. Linearity assumptions per univariate model were tested using grouped smooth, LOESS, and fractional polynomial methods to determine variable coding. To build a final multivariate model, confounding effects were found by adding potential confounders into the model and calculating the percent change of parameter estimates; variables leading to a 10-20% chance in a parameter estimate were kept in the models as confounders. Interaction effects were also tested between each combination of variables, and interaction effects with a p value less than 0.05 were kept in the model to make a preliminary main effects model. Goodness of fit statistics (Hosmer-Lemeshow test and pseudo R-squared) and model diagnostics were run to check for model fit and influential points. 
+
+
+```{r, message=FALSE, results='hide', warning=FALSE}
+library(SummarizedExperiment)
+library(TCGAbiolinks)
+
+clin_query = GDCquery(project = "TCGA-BRCA", data.category = "Clinical", file.type = "xml")
+# GDCdownload(clin_query) 
+clinic = GDCprepare_clinic(clin_query, clinical.info = "patient")
+```
+
+
+```{r, message=FALSE, echo=FALSE}
+library(tidyverse)
+library(data.table)
+library(plotly)
+```
+
+```{r, message=FALSE, results='hide', warning=FALSE, echo=FALSE}
+clinic = as.data.table(clinic) 
+skimr::skim(clinic$race_list)
+```
+
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+clinic %>% group_by(race_list) %>% summarise(count = n())
+109/(nrow(clinic))
+
+```
+
+There are 109 empty values, which makes up around 9% of the dataset. These values were changed to "not reported" to examine if the relationship between survival and cancer diagnosis stage differ among those with missing race information and the other racial groups in this study. 
+
+```{r, message=FALSE, echo=FALSE}
+clinic$race_list = as.character(clinic$race_list)
+clinic$race_list[clinic$race_list == ""] = NA
+clinic$race_list[is.na(clinic$race_list)] = "NOT REPORTED"
+clinic$race_list = as.factor(clinic$race_list)
+
+```
+
+```{r, echo=FALSE}
+knitr::kable(clinic %>% 
+            group_by(race_list) %>% 
+            summarise(count = n()), 
+            caption = "Distribution of Race Among Breast Cancer Patients", 
+            col.names = c("Race", "Number of Individuals"))
+
+```
+
+White patients make up the vast majority of this dataset. Due to the distribution of this dataset, the patients were categorized into "white" or "non-white." 
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+clinic$race_bin = ifelse(clinic$race_list == "WHITE", "White", ifelse(clinic$race_list == "NOT REPORTED", "Not Reported", "Non-White"))
+clinic$race_bin = as.factor(clinic$race_bin)
+
+knitr::kable(clinic %>% 
+            group_by(race_bin) %>% 
+            summarise(count = n(), prop = round(100*(count/1174), 2)), 
+            caption = "Table 1: Distribution of White vs. Non-White Patients Among Breast Cancer Patients", 
+            col.names = c("Racial Group", "Number of Individuals", "Percentage"))
+
+```
+
+After this grouping, there are 264 non-white patients, 109 missing race patients, and 801 white patients. 
+
+```{r, echo=FALSE}
+clinic %>% group_by(initial_pathologic_diagnosis_method) %>% summarise(count = n())
+```
+
+There are 111 empty values, which make up 9% of the dataset. Because this is still under 10% of the data, it was imputed by the most common diagnosis method by gender. 
+
+```{r, echo=FALSE}
+clinic %>% group_by(gender) %>% count(initial_pathologic_diagnosis_method) %>% arrange(desc(n))
+clinic$initial_pathologic_diagnosis_method = as.character(clinic$initial_pathologic_diagnosis_method)
+clinic$initial_pathologic_diagnosis_method[clinic$initial_pathologic_diagnosis_method == ""] = NA
+clinic$initial_pathologic_diagnosis_method[is.na(clinic$initial_pathologic_diagnosis_method)] = "Core needle biopsy"
+clinic$initial_pathologic_diagnosis_method = as.factor(clinic$initial_pathologic_diagnosis_method)
+
+```
+
+```{r, echo=FALSE}
+knitr::kable(clinic %>% 
+            group_by(initial_pathologic_diagnosis_method) %>% 
+            summarise(count = n(), prop = round(100*(count/1174), 2)) %>% arrange(desc(count)), 
+            caption = "Table 2: Distribution of Diagnosis Method Among Breast Cancer Patients",
+            col.names = c("Diagnosis Method", "Number of Individuals", "Percentage"))
+```
+
+Core needle biopsy remains the most common diagnosis method, followed by tumor resection and fine needle aspiration biopsy. 
+
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+skimr::skim(clinic$age_at_initial_pathologic_diagnosis)
+skimr::skim(clinic$year_of_initial_pathologic_diagnosis)
+
+```
+
+Diagnosis year and lymph node count contained missing values as well; this was imputed based on the average within the gender variable.
+
+```{r, message=FALSE, results='hide', warning=FALSE, echo=FALSE}
+
+clinic = clinic[, diag_year_imp := fcoalesce(as.double(year_of_initial_pathologic_diagnosis), mean(year_of_initial_pathologic_diagnosis, na.rm = TRUE)), by = .(gender)]
+clinic$diag_year_imp = ceiling(clinic$diag_year_imp)
+
+clinic = clinic[, lymph_count := fcoalesce(lymph_node_examined_count, as.integer(mean(lymph_node_examined_count, na.rm = TRUE))), by = .(gender)]
+
+```
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+skimr::skim(clinic$diag_year_imp)
+
+```
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+sum(is.na(clinic$vital_status))
+sum(clinic$vital_status == "Dead")
+
+knitr::kable(clinic %>% group_by(vital_status) %>% count() %>% mutate(prop = round(100*n/1174, 2)), caption = "Table 3: Distribution of Vital Status",
+            col.names = c("Vital Status", "Number of Patients", "Percentage"))
+
+```
+
+There are 112 patients who have passed away, making up about 9.5% of the dataset. 
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+clinic$after_diagnosis = ifelse(is.na(clinic$days_to_death), 2022 - clinic$diag_year_imp, ceiling(clinic$days_to_death/365 ))
+
+summary(clinic$after_diagnosis)
+
+```
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+sum(is.na(clinic$stage_event_pathologic_stage))
+
+```
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+dim(clinic)
+str(clinic)
+head(clinic)
+tail(clinic)
+
+```
+
+After data wrangling and cleaning, the resulting dataset consists of 1174 observations for 116 variables, of which include newly imputed categorical variables and the years survived after diagnosis variable. 
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+summary(clinic$stage_event_pathologic_stage)
+table(clinic$stage_event_pathologic_stage)
+
+summary(clinic$race_list)
+table(clinic$race_list)
+
+summary(clinic$age_at_initial_pathologic_diagnosis)
+
+summary(clinic$diag_year_imp)
+
+summary(clinic$after_diagnosis)
+```
+
+Summary statistics for variables of interest were subsequently generated. Summary statistics for cancer stage show that stages I, II, and III contain different substages on top of their overarching numerical stage; these were then standardized by numerical stage. Summary statistics for age in years shows that the mean and median ages are very similar both at around 58.5 years of age; the minimum age was 26 years of age, and the oldest patient was 90 years old at the time of diagnosis. Summary statistics for diagnosis year shows that most patients in the late 2000s with the last patient being diagnosed in 2013. Finally, summary statistics for years survived after diagnosis showed that the minimum years survived was 9 years after diagnosis, and the maximum was 34 years after diagnosis.
+
+
+```{r, message=FALSE, echo=FALSE}
+clinic$stage_event_pathologic_stage = ifelse(clinic$stage_event_pathologic_stage == "Stage I" | 
+                          clinic$stage_event_pathologic_stage == "Stage IA" | 
+                          clinic$stage_event_pathologic_stage == "Stage IB", "Stage I", 
+      ifelse(clinic$stage_event_pathologic_stage == "Stage II" | 
+                          clinic$stage_event_pathologic_stage == "Stage IIA" | 
+                          clinic$stage_event_pathologic_stage == "Stage IIB", "Stage II", 
+      ifelse(clinic$stage_event_pathologic_stage == "Stage III" | 
+                          clinic$stage_event_pathologic_stage == "Stage IIIA" | 
+                          clinic$stage_event_pathologic_stage == "Stage IIIB" | 
+                          clinic$stage_event_pathologic_stage == "Stage IIIC", "Stage III", 
+      ifelse(clinic$stage_event_pathologic_stage == "Stage IV", "Stage IV", "Stage X"))))
+```
+
+```{r, echo=FALSE}
+stage_stats = clinic %>% 
+  group_by(stage_event_pathologic_stage) %>% 
+  count() %>% 
+  arrange(desc(n)) %>% mutate(prop = round(100*n/1174, 2))
+
+stage_stats = stage_stats %>% rename("Number of Patients" = "n", "Stage of Diagnosis" = "stage_event_pathologic_stage", "Percentage" = "prop")
+knitr::kable(stage_stats, 
+             caption = "Table 3: Distribution of Cancer Stage Among Breast Cancer Patients")
+  
+```
+
+
+Most patients were diagnosed at Stage II with 660 patients being diagnosed at this stage. This is followed by Stage III with 268 patients and Stage I with 198 patients. Stage IV and X diagnoses make up a very small number of diagnoses in this dataset. 
+
+```{r, echo=FALSE}
+vars = clinic %>% select(age_at_initial_pathologic_diagnosis, lymph_count)
+
+summ_stats = psych::describe(vars)
+class(summ_stats) = "data.frame"
+
+summ_stats[, c("mean", "sd", "median")]
+knitr::kable(summ_stats[, c("mean", "sd", "median")], 
+             caption = "Table 4: Summary Statistics for Diagnosis and Lymph Node Count")
+
+```
+
+
+# Exploratory Data Analysis
+
+```{r, message=FALSE, echo=FALSE}
+plot_ly(data = clinic, x = ~race_bin, y = ~age_at_initial_pathologic_diagnosis, 
+                color = ~race_bin, type = "box", boxmean = TRUE) %>% layout(title = "Age of Breast Cancer Patients by Race", 
+         xaxis = list(title = "Race"), 
+         yaxis = list(title = "Age at Diagnosis in Years"))
+```
+
+There does not seem to be much difference in the distribution of diagnosis age among non-white and white patients. White patients seem to have a bigger range in diagnosis ages with a lower third quartile, and higher mean and median diagnosis age. Among non-white patients, the mean diagnosis age is a little higher than the median diagnosis age. However, the patients with missing racial data have higher means and medians than both non-white and white patients.
+
+
+## Kaplan Meier Plots
+
+Kaplan-Meier curves were graphed to see if a Cox model was appropriate for this analysis. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(survival)
+library(survminer)
+clinic$death_event = ifelse(clinic$vital_status == "Dead", 1, 0)
+
+surv <- Surv(time = clinic$days_to_death, 
+                    event = clinic$death_event)
+
+stage_fit <- surv_fit(surv ~ clinic$stage_event_pathologic_stage, data = clinic)
+ggsurvplot(stage_fit, pval=TRUE)
+
+race_fit <- surv_fit(surv ~ clinic$race_bin, data = clinic)
+ggsurvplot(race_fit, pval=TRUE)
+
+clinic$age_group = ifelse(clinic$age_at_initial_pathologic_diagnosis < 50, "young", "old")
+age_fit <- surv_fit(surv ~ clinic$age_group, data = clinic)
+ggsurvplot(age_fit, pval=TRUE)
+
+diag_fit <- surv_fit(surv ~ clinic$initial_pathologic_diagnosis_method, data = clinic)
+ggsurvplot(diag_fit, pval=TRUE)
+```
+
+None of the variables of interest were seen to have proportional hazards. Therefore, a logistic regression model was chosen, as the outcome is binary. 
+
+# Logistic Regression Univariate Analysis
+
+```{r, echo=FALSE} 
+race_m = glm(death_event ~ race_bin, data = clinic, family = "binomial") 
+race_m %>% summary()
+
+```
+
+Missing race patients have exp(-0.3415) = 0.711 times the odds of death than non-white patients; however, this value was not significant. White patients have exp(0.3835) = 1.47 times the odds of death than non-white patients; however, this value was also not significant. 
+
+```{r, echo=FALSE}
+source("~/pm592/labs/group_smooth.R")
+source("~/pm592/labs/logit_plot.R")
+library(mfp)
+age_m = glm(death_event ~ age_at_initial_pathologic_diagnosis, data = clinic, family = "binomial") 
+age_m %>% summary()
+
+# test linearity assumptions
+group_smooth("age_at_initial_pathologic_diagnosis", "death_event", clinic)
+logit_plot("age_at_initial_pathologic_diagnosis", "death_event", clinic)
+mfp(death_event ~ fp(age_at_initial_pathologic_diagnosis), data = clinic, family = "binomial")
+
+# age cubed
+new_age_m = glm(death_event ~ I(age_at_initial_pathologic_diagnosis^3), data = clinic, family = "binomial") 
+new_age_m %>% summary()
+  
+```
+
+Fractional polynomials suggests that the best transformation for age is a cubic transformation. After transformation, the coefficient estimate for age cubed is 1.602e-6 and statistically significant (p = 0.00774). 
+
+```{r, echo=FALSE}
+stage_m = glm(death_event ~ stage_event_pathologic_stage, data = clinic, family = "binomial")
+stage_m %>% summary()
+
+```
+
+Patients diagnosed at stage II have exp(0.03035) = 1.03 times the odds of death of patients diagnosed at stage I; however, this value was not significant. Patients diagnosed at stage III have exp(0.54181) = 1.719 times the odds of death of patients diagnosed at stage I; however, this value was not significant. Patients diagnosed at stage IV have exp(2.2882) = 9.857 times the odds of death of patients diagnosed at stage I (p = 1.12e-5). Patients diagnosed at stage IV have exp(2.04525) = 7.731 times the odds of death of patients diagnosed at stage I (p = 2.52e-5).
+
+```{r, echo=FALSE}
+lymph_m = glm(death_event ~ lymph_count, data = clinic, family = "binomial") 
+lymph_m %>% summary()
+# test linearity assumptions
+mfp(death_event ~ fp(lymph_count), data = clinic, family = binomial)
+logit_plot("lymph_count", "death_event", clinic)
+group_smooth("lymph_count", "death_event", clinic)
+
+clinic = 
+  clinic %>%
+  mutate(
+    lymph.q4 = cut(lymph_count,
+                     breaks = quantile(lymph_count, probs = 0:4/4),
+                     include.lowest = T)
+  )
+
+lymph_q4_m = glm(death_event ~ lymph.q4, data = clinic, family = "binomial") 
+lymph_q4_m %>% summary()
+
+```
+
+Assessing linearity with fractional polynomials, the ideal transformation given was a complex polynomial combination. The LOESS plot also revealed that a continuous coding of the variable may violate linearity. Therefore, the grouped smooth method was also used to assess linearity and see if a categorical coding would be better at modeling lymph node count. In the grouped smooth method, it looks like a categorical coding of lymph node count is more appropriate; therefore, a model was refit with lymph nodes as categorical quartiles. Those with a lymph count of 3 to 10 have exp(0.4338) = 1.543 times the odds of death compared to those with a lymph count of 0 to 3; however, this value was not significant. Those with a lymph count of 10 to 15 have exp(1.0275) = 2.794 times the odds of death compared to those with a lymph count of 0 to 3 (p = 0.002362). Those with a lymph count of 15 to 44 have exp(1.0972) = 2.996 times the odds of death compared to those with a lymph count of 0 to 3 (p = 0.000444). 
+
+```{r, echo=FALSE}
+diag_m = glm(death_event ~ factor(initial_pathologic_diagnosis_method), data = clinic, 
+             family = binomial) 
+diag_m %>% summary()
+```
+
+Excisional biopsies, fine needle aspiration biopsies, incisional biopsies, "other" methods, and tumor resections were the diagnosis methods that yielded statistically significantly different odds than core needle biopsies. Those who were diagnosed with excisional biopsies have exp(1.6822) = 5.377 times the odds of death as those who were diagnosed with core needle biopsies (p = 7.17e-5). Those who were diagnosed with fine needle aspiration biopsies have exp(1.2341) = 3.435 times the odds of death as those who were diagnosed with core needle biopsies (p = 6.01e-6). Those who were diagnosed with incisional biopsies have 8.365 times the odds of death as those who were diagnosed with core needle biopsies (p = 3.24e-5). Those who were diagnosed with "other" methods have exp(0.8355) = 2.306 times the odds of death as those who were diagnosed with core needle biopsies (p = 0.019). Those who were diagnosed with tumor resections have exp(-1.5477) = 0.213 times the odds of death as those who were diagnosed with core needle biopsies (p = 0.0098).
+
+## Summary Results of Univariate Analyses
+
+```{r, message = FALSE, warning=FALSE, echo=FALSE}
+sjPlot::tab_model(race_m, new_age_m, stage_m, lymph_q4_m, diag_m)
+```
+
+# Visualization of Age, Vital Status, and Race
+
+```{r, message=FALSE, echo=FALSE}
+
+age_prelim = clinic %>%
+  group_by(race_bin) %>%
+  do(p=plot_ly(., x = ~vital_status, y = ~age_at_initial_pathologic_diagnosis, 
+               color = ~race_bin, type = "box", boxmean = TRUE)) %>% 
+  subplot(nrows = 1, shareY = TRUE) %>% 
+  layout(title = "Age at Diagnosis Stratified by Vital Status Across Racial Groups", 
+         yaxis = list(title = "Age at Diagnosis in Years"))
+
+age_prelim
+
+```
+
+There are more non-white patients who have passed away with younger diagnosis ages than white and non-white patients; however, the mean and median age of diagnosis among white and non-white patients who have passed away are still quite similar. Regardless of vital status, patients with issing race information have higher ages of diagnosis with the mean age of diagnosis being much higher than the median for those who have passed away. 
+
+The distributions for age by cancer stage was then examined.
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+clinic$stage_event_pathologic_stage = as.factor(clinic$stage_event_pathologic_stage)
+
+plot_ly(data = clinic, x = ~age_at_initial_pathologic_diagnosis, color = ~stage_event_pathologic_stage, type = "histogram") %>% layout(barmode = "stack", title = "Distribution of Age by Stage of Cancer Diagnosis", xaxis = list(title = "Age in Years at Diagnosis"), yaxis = list(title = "Count"))
+
+```
+
+The distributions of age look relatively normal for every cancer stage; from this stacked histogram, the distribution of age doesn't seem to differ between stage at diagnosis. However, we can also look at the distribution of diagnosis stage by race to see if these distributions are racially differentiated.
+
+# Checking for Confounding Effects
+
+```{r, echo=FALSE}
+glm(death_event ~ I(age_at_initial_pathologic_diagnosis^3) + race_bin, data = clinic, 
+    family = "binomial") %>% summary()
+
+stage_adj_m = glm(death_event ~ I(age_at_initial_pathologic_diagnosis^3) + stage_event_pathologic_stage + race_bin, 
+                  data = clinic, family = "binomial")
+
+stage_adj_m %>% summary()
+
+```
+
+In a model containing both race and age, those with missing race information have 0.588 times the odds of death compared to non-white patients adjusting for age; however, this value was not significant. White patients are associated with 1.397 times the odds of death compared to non-white patients adjusting for age; however, this value was not significant. The parameter estimate for age cubed was 1.728e-6 (p = 0.00438). 
+
+Stage changed the parameter estimate of age cubed by 7.9% and the parameter estimate of the not reported race patients by more than 10% (19.6%), so it was kept in the model as a confounder.
+
+Diagnosis method was also examined to see if the relationship between stage, race, and death event was confounded by diagnosis method.
+
+```{r, echo=FALSE}
+glm(death_event ~ stage_event_pathologic_stage + I(age_at_initial_pathologic_diagnosis^3) + factor(initial_pathologic_diagnosis_method) + race_bin, 
+    data = clinic, family = binomial) %>% summary()
+```
+
+Diagnosis method significantly changed the parameter estimate for Stage III (11%), Stage X (18%), as well as both parameter estimates for missing race information patients (46%) and white patients (56%), so it was kept in the model as a confounder. 
+
+# Examining Distributions of Stage by Race
+
+```{r, message=FALSE, results='hide', echo=FALSE}
+race_dist = clinic %>% 
+  ggplot(mapping = aes(x = stage_event_pathologic_stage)) + 
+  geom_bar() +
+  facet_wrap(~race_bin) + 
+  ggtitle("Distribution of Diagnosis Stage by Race") + 
+  xlab("\nStage of Diagnosis") + 
+  ylab("Number of Patients") + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    axis.title.x = element_text(margin = margin(t = 20))
+  )
+
+ggplotly(race_dist)
+```
+
+From these bar graphs, it looks like the distribution of diagnosis stage also does not differ by race. However, as diagnosis stage is a confounder, there is evidence that it changes vital status based on racial group despite no significant differences in diagnosis stage’s distribution by race. 
+
+Then, the relationship between the number of years survived after diagnosis and age of diagnosis per stage of cancer was examined to determine if the relationship between survivability and age differed by stage of diagnosis. 
+
+# Examining Years Survived After Diagnosis and Age of Diagnosis by Vital Status and Race
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+vit_age = clinic %>% 
+  ggplot(mapping = aes(x = age_at_initial_pathologic_diagnosis, y = after_diagnosis, color = vital_status)) + 
+  geom_jitter(aes(size = after_diagnosis, alpha = 0.5, text = paste(paste("Vital status: ", vital_status), "\n", paste("Years Survived after Diagnosis: ", after_diagnosis)))) + 
+  geom_smooth(method = "lm") + 
+  facet_wrap(~stage_event_pathologic_stage) + 
+  xlab("Age in Years at Diagnosis") + 
+  ylab("Years Survived After Diagnosis") + 
+  ggtitle("Years Survived After Cancer Diagnosis by Age and Vital Status") + guides(alpha = FALSE) 
+
+ggplotly(vit_age, tooltip = "text") %>% layout(legend = list(title = list(text = "Vital Status")))
+
+```
+
+For all stages, those who have passed away have less years survived after diagnosis across all ages compared to those who are still alive. However, some relationships between years survived after diagnosis and age at diagnosis differ across stage; although there seems to be a slight negative relationship between years survived after diagnosis and diagnosis age for stages I, II, III, and X across vital status, there is a slightly positive relationship among those diagnosed at Stage IV across vital status. However, due to Stage IV diagnoses only making up a small percentage of all diagnoses in this dataset, this relationship is hard to confirm. 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+age_race_stage = clinic %>% 
+  ggplot(mapping = aes(x = age_at_initial_pathologic_diagnosis, y = after_diagnosis, color = race_bin)) + 
+  geom_jitter(aes(text = paste("Vital status: ", vital_status))) + 
+  geom_smooth(method = "lm") + 
+  facet_wrap(~stage_event_pathologic_stage) + 
+  xlab("Age in Years at Diagnosis") + 
+  ylab("Years Survived After Diagnosis") + 
+  ggtitle("Years Survived After Cancer Diagnosis by Age, Race, and Stage") 
+
+ggplotly(age_race_stage, tooltip = "text") %>% layout(legend = list(title = list(text = "Race")))
+
+```
+
+There seems to be very slightly negative relationship between years survived after diagnosis and age in stages I, II, and III across all racial groups. There is, however, a slight positive relationship between years survived after diagnosis and age for white and missing race patients in Stage IV and non-white patients in Stage X. This suggests that the relationship between years survived and age does differ to an extent by stage.  
+
+These visual differences suggest that race of a patient and stage of diagnosis may have interaction effects.
+
+# Checking for Interaction Effects
+
+```{r, echo=FALSE, warning=FALSE}
+prelim_final = glm(death_event ~ stage_event_pathologic_stage + I(age_at_initial_pathologic_diagnosis^3) + race_bin + lymph.q4 + stage_event_pathologic_stage*lymph.q4 + factor(initial_pathologic_diagnosis_method), 
+                   data = clinic, family = "binomial") 
+
+prelim_final %>% summary()
+
+```
+
+Lastly, interaction effects were tested between stage and lymph node count, as well as between race and stage. The interaction between stage and lymph node count was significant among patients diagnosed at Stage X for the third and fourth lymph count quartiles; this suggests that the relationship between odds of death and stage differ by lymph node count. 
+
+Lastly, race was removed from the model because its effects did not remain significant. 
+
+```{r, echo=FALSE}
+final_m = glm(death_event ~ stage_event_pathologic_stage + I(age_at_initial_pathologic_diagnosis^3) + lymph.q4 + stage_event_pathologic_stage*lymph.q4 + factor(initial_pathologic_diagnosis_method),
+              data = clinic, family = "binomial")
+final_m %>% summary()
+```
+
+
+## Goodness of Fit Statistics
+
+```{r, echo=FALSE}
+DescTools::PseudoR2(final_m)
+ResourceSelection::hoslem.test(final_m$y, fitted(final_m), g=20)
+```
+
+There is no evidence for a lack of fit for the final model (p = 0.4425). The McFadden pseudo-R2 is 0.1867, suggesting 18.67% of the variance in vital status is explained by the model.
+
+## Model Diagnostics and Influential Points
+
+```{r, echo=FALSE}
+source("~/pm592/labs/plot_resid_lev_logistic.R")
+
+plot_resid_lev_logistic(final_m)
+LogisticDx::dx(final_m) %>% arrange(desc(dBhat)) %>% select(dBhat, dChisq, y, P, n, yhat, sPr, h)
+```
+
+There seems to be a few points that may be influential. One point has very high dBhat and dChisq values; however, the probability for death event for this covariate pattern was 6.39e-8 and the only person with this covariate pattern survived. This suggests that the actual outcome for this covariate pattern is not far off from the predicted. On the other hand, the covariate pattern with the next highest dBhat value shows that the probability of death event for this individual was 0.218, but the only individual in this covariate pattern passed away. Similarly, the two covariate patterns with the next highest dbHat values predicted that death event were not as likely as survival, but the only patients in those covariate patterns also passed away. 
+
+```{r, echo=FALSE, results='hide'}
+clinic[703:704, ] %>% select(death_event, stage_event_pathologic_stage, lymph.q4, initial_pathologic_diagnosis_method, age_at_initial_pathologic_diagnosis)
+
+```
+
+The patient who passed away was a 44 year old Stage I patient with a low lymph count and diagnosed with fine needle aspiration biopsy; the patient passed away with a low stage of diagnosis and lymph count, than expected. On the other hand, the patient who survived was a 64 year old Stage I patient with the lowest lymph count and diagnosed with core needle biopsy. This corresponds to the patient with the highest dbHat value; however, the probability of death event was very small for this patient and this patient has survived, indicating that the actual and predicted values are not that far off. 
+
+# Final Model
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+sjPlot::tab_model(final_m,
+  transform = NULL
+)
+
+```
+
+The final model included cubic age at diagnosis, diagnosis method, diagnosis stage, and lymph node count as covariates (with stage and lymph node count having interaction effects). The odds ratio for the cubic age term was exp(2.191e-6) = 1.00 (p = 0.000927). 
+
+Diagnosis methods leading to significant differences in odds of death were excisional biopsy, fine needle aspiration biopsy, incisional biopsy, and tumor resection (adjusting for stage, age, and lymph node count). Adjusting for all other covariates, patients diagnosed with excisional biopsies had exp(1.582) = 4.86 times the odds of death compared to those diagnosed with core needle biopsies (p = 0.000775); those diagnosed with fine needle aspiration biopsies had exp(1.134) = 3.11 times the odds of death compared to those diagnosed with core needle biopsies (p = 0.000119); those diagnosed with incisional biopsies had exp(2.235) = 9.35 times the odds of death compared to those diagnosed with core needle biopsies (p = 3.46e-5); and those diagnosed with tumor resection had exp(-1.735) = 0.634 times the odds of death compared to those diagnosed with core needle biopsies (p = 0.007012). 
+
+Stage X patients were the only stage that had significantly different odds of death compared to Stage I patients adjusting for all other covariates; Stage X patients had exp(5.05) = 156.02 times the odds of death compared to Stage I patients (p = 0.000288). Furthermore, the highest lymph node count quartile was the only quartile with significantly different odds of death compared to the lowest quartile adjusting for all over covariates; patients with lymph node counts between 15 and 44 exp(2.672) = 14.47 times the odds of death compared to the lowest quartile (0.006455). 
+
+However, the relationship between lymph node count changed depending on stage. In particular, Stage X patients for all lymph node count quartiles showed significantly different odds of death compared to Stage I lowest quartile patients adjusting for age and diagnosis method. Stage X patients who had lymph node counts between 3 and 10 had exp(-3.442) = 0.032 times the odds of death compared to Stage I patients with the lowest lymph node counts. Stage X patients with lymph node counts between 10 and 15 had exp(-5.401) = 0.0045 times the odds of death compared to Stage I patients with the lowest lymph node counts. Stage X patients with lymph node counts between 15 and 44 had exp(-6.410) = 0.0016 times the odds of death compared to Stage I patients with the lowest lymph node counts. 
+
+## Summary Visualization
+```{r, echo=FALSE}
+summary = clinic %>% 
+  ggplot() + 
+  stat_summary(mapping = aes(x = race_bin, y = after_diagnosis, color = race_bin, text = paste("Vital Status: ", vital_status)), 
+               fun.min = min, fun.max = max, fun = mean, na.rm = TRUE) + 
+  xlab("Race") + 
+  ylab("Years Survived After Diagnosis") + 
+  ggtitle("Summary of Years Survived After Diagnosis by Race") + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), plot.margin = margin(10, 10, 10, 100))
+
+ggplotly(summary, tooltip = "text") %>% layout(legend = list(title = list(text = "Race")))
+
+```
+
+The summary graph suggests that white patients who have survived have on average live longer than non-white patients who have survived; on the other hand, the average years survived after diagnosis for those have passed away do not differ much between non-white and white patients. However, the mean years survived after diagnosis for the missing race patients who have survived is slightly higher than non-white and white-patients, and the mean years survived after diagnosis for those who have passed away are lower than non-white and white patients. Furthermore, the range of years survived after diagnosis for both white and non-white patients are much larger than those who have missing race information. Given the relationships between years survived after diagnosis and age of diagnosis for stage IV and X for non-reported and white patients, it is likely that missing race patients are the most similar to white patients; however, because of similarities in age of diagnosis across vital status and distributions in diagnosis stage for non-white and white patients in this dataset, this cannot be confirmed.
+
+# Conclusion
+From this analysis, there were no significant differences found in diagnosis age among racial groups across vital status, nor were there significant differences found in the relationship between years survived after diagnosis and diagnosis age stratified by race for patients diagnosed in Stages I, II, and III. 
+
+A logistic regression analysis revealed that race does not have a significant effect on vital status in breast cancer, contrary to previous research; however, age at diagnosis, stage, diagnosis method, and lymph node counts are associated with vital status. Stage X patients had significantly higher odds of death compared to Stage I patients adjusting for age, diagnosis method, and lymph count; and patients with lymph node counts between 15 and 44 also had higher odds of death compared to patients with 0 and 3 lymph nodes, adjusting for age, diagnosis method, and stage. However, interaction effects between diagnosis stage and lymph node counts were significant, which suggest that being diagnosed at Stage X many have a protective effect for patients with high lymph node counts, adjusting for age and diagnosis method. 
+
+However, due to the limited number of patients in both Stage IV and X compared to the other stages, which both had less than 30 patients, future analysis should be done with a larger sample size. 
+
+# Addenda
+The link to my code can be found here: https://github.com/eztang12/final_project_pm566/blob/main/final_proj.Rmd
+
+Code to download data is in the code. Note that the package `TCGAbiolinks` needs to be installed for data download.
+
+Data needs to be re-queried and loaded for every new R session; however, data only needs to be downloaded once. If this is your first time downloading this data, please uncomment the line `GDCDownload`.
+
+# References
+Azamjah, N., Soltan-Zadeh, Y., & Zayeri, F. (2019). Global trend of breast cancer mortality
+rate: A 25-year study. Asian Pacific Journal of Cancer Prevention, 20(7), 2015–2020.
+
+Kim, M. K., Park, H. S., Kim, J. Y., Kim, S., Nam, S., Park, S., & Kim, S. I. (2017). The clinical implication of the number of lymph nodes harvested during sentinel lymph node biopsy and its effects on survival outcome in patients with node-negative breast cancer. The American Journal of Surgery, 214(4), 726–732. 
+
+McGuire, A., Brown, J., Malone, C., McLaughlin, R., & Kerin, M. (2015). Effects of age on the detection and management of  breast cancer. Cancers, 7(2), 908–929.
+
+National Institute of Health. (n.d.). The Cancer Genome Atlas Program. National Cancer
+Institute. Retrieved October 18, 2022, from
+https://www.cancer.gov/about-nci/organization/ccg/research/structural-genomics/tcga
+
+Ooi, S. L., Martinez, M. E., & Li, C. I. (2010). Disparities in breast cancer characteristics and outcomes by Race/Ethnicity. Breast Cancer Research and Treatment, 127(3), 729–738. 
+
+Wang, L. (2017). Early Diagnosis of Breast Cancer. Biosensors for Cancer Biomarkers, 17(7), 1572. 
+
+Yang, J., Long, Q., Li, H., Lv, Q., Tan, Q., & Yang, X. (2017). The value of positive lymph nodes ratio combined with negative lymph node count in prediction of breast cancer survival. Journal of Thoracic Disease, 9(6), 1531–1537.
