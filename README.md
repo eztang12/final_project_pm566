@@ -5,3 +5,5 @@ This project aims to address the question if race affects the age of diagnosis f
 My project website is available at this link: https://eztang12.github.io/final_project_pm566/
 
 Please download the full PDF report here: https://github.com/eztang12/final_project_pm566/blob/main/final_report.pdf
+
+Logistic regression analysis of clinical factors found here: https://github.com/eztang12/final_project_pm566/blob/main/final_report.docx
